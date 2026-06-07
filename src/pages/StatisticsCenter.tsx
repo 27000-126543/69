@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useMemo } from 'react'
 import {
   Row,
   Col,
@@ -7,291 +7,446 @@ import {
   Button,
   Space,
   Tag,
-  Select,
-  Tabs,
   Statistic,
-  Progress,
   Empty,
-  Radio,
 } from 'antd'
 import {
   BarChartOutlined,
-  ExportOutlined,
-  FilePdfOutlined,
   FileExcelOutlined,
+  FilePdfOutlined,
   EnvironmentOutlined,
   TeamOutlined,
-  RiseOutlined,
-  FallOutlined,
+  CheckCircleOutlined,
+  TrophyOutlined,
 } from '@ant-design/icons'
 import { useAppStore } from '@/store/useAppStore'
-import { exportStatisticsToExcel, exportStatisticsReportToPDF } from '@/utils/exporters'
+import type { StatisticsData } from '@/types'
 import ReactECharts from 'echarts-for-react'
-import type { HeatmapPoint } from '@/types'
-
-const { Option } = Select
+import { exportStatisticsToExcel, exportStatisticsReportToPDF } from '@/utils/exporters'
 
 const StatisticsCenter: React.FC = () => {
-  const { getStatisticsByRegionAndSubject, examSites, arrangements, invigilators, schedules, getHeatmapData } =
-    useAppStore()
+  const {
+    candidates,
+    scores,
+    examSites,
+    examSubjects,
+    invigilators,
+    arrangements,
+  } = useAppStore()
 
-  const [filterRegion, setFilterRegion] = useState<string | undefined>()
-  const [filterSubject, setFilterSubject] = useState<string | undefined>()
-  const [heatmapType, setHeatmapType] = useState<'room_usage' | 'invigilator_density'>('room_usage')
+  const statsByRegionAndSubject = useMemo((): StatisticsData[] => {
+    const result: StatisticsData[] = []
+    const regionMap = new Map<string, Map<string, StatisticsData>>()
 
-  const allStats = useMemo(() => getStatisticsByRegionAndSubject(), [getStatisticsByRegionAndSubject])
-  const heatmapData = useMemo(() => getHeatmapData(), [getHeatmapData])
-
-  const filteredStats = useMemo(() => {
-    return allStats.filter((s) => {
-      if (filterRegion && s.region !== filterRegion) return false
-      if (filterSubject && s.subjectName !== filterSubject) return false
-      return true
-    })
-  }, [allStats, filterRegion, filterSubject])
-
-  const regions = [...new Set(allStats.map((s) => s.region))]
-  const subjects = [...new Set(allStats.map((s) => s.subjectName))]
-
-  const summary = useMemo(() => {
-    const total = filteredStats.reduce((sum, s) => sum + s.totalCandidates, 0)
-    const attended = filteredStats.reduce((sum, s) => sum + s.attendedCount, 0)
-    const cheated = filteredStats.reduce((sum, s) => sum + s.cheatedCount, 0)
-    const avgScore =
-      filteredStats.length > 0
-        ? filteredStats.reduce((sum, s) => sum + s.averageScore, 0) / filteredStats.length
-        : 0
-    const avgPass =
-      filteredStats.length > 0
-        ? filteredStats.reduce((sum, s) => sum + s.passRate, 0) / filteredStats.length
-        : 0
-    return {
-      total,
-      attended,
-      absent: total - attended,
-      cheated,
-      avgScore: Math.round(avgScore * 100) / 100,
-      avgPass: Math.round(avgPass * 10000) / 100,
-    }
-  }, [filteredStats])
-
-  const barOption = useMemo(() => {
-    const regionsData = [...new Set(filteredStats.map((s) => s.region))]
-    return {
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      legend: { data: ['报考人数', '实考人数', '缺考人数'], bottom: 0 },
-      grid: { left: 40, right: 20, top: 20, bottom: 50 },
-      xAxis: {
-        type: 'category',
-        data: regionsData,
-        axisLabel: { rotate: 20 },
-      },
-      yAxis: { type: 'value' },
-      series: [
-        {
-          name: '报考人数',
-          type: 'bar',
-          data: regionsData.map((r) =>
-            filteredStats.filter((s) => s.region === r).reduce((sum, s) => sum + s.totalCandidates, 0)
-          ),
-          itemStyle: { color: '#1677ff', borderRadius: [4, 4, 0, 0] },
-        },
-        {
-          name: '实考人数',
-          type: 'bar',
-          data: regionsData.map((r) =>
-            filteredStats.filter((s) => s.region === r).reduce((sum, s) => sum + s.attendedCount, 0)
-          ),
-          itemStyle: { color: '#52c41a', borderRadius: [4, 4, 0, 0] },
-        },
-        {
-          name: '缺考人数',
-          type: 'bar',
-          data: regionsData.map((r) =>
-            filteredStats.filter((s) => s.region === r).reduce((sum, s) => sum + s.absentCount, 0)
-          ),
-          itemStyle: { color: '#ff4d4f', borderRadius: [4, 4, 0, 0] },
-        },
-      ],
-    }
-  }, [filteredStats])
-
-  const pieOption = useMemo(() => {
-    const subjectData = subjects.map((sn) => ({
-      name: sn,
-      value: filteredStats.filter((s) => s.subjectName === sn).reduce((sum, s) => sum + s.totalCandidates, 0),
-    })).filter((d) => d.value > 0)
-
-    return {
-      tooltip: { trigger: 'item' },
-      legend: { type: 'scroll', bottom: 0 },
-      series: [
-        {
-          name: '科目报考分布',
-          type: 'pie',
-          radius: ['35%', '65%'],
-          center: ['50%', '45%'],
-          avoidLabelOverlap: false,
-          itemStyle: {
-            borderRadius: 8,
-            borderColor: '#fff',
-            borderWidth: 2,
-          },
-          label: { show: false },
-          emphasis: {
-            label: { show: true, fontSize: 14, fontWeight: 'bold' },
-          },
-          data: subjectData,
-        },
-      ],
-    }
-  }, [filteredStats, subjects])
-
-  const scoreDistOption = useMemo(() => {
-    const ranges = ['0-59', '60-69', '70-79', '80-89', '90-100']
-    const aggregated = ranges.map((r) => {
-      let count = 0
-      filteredStats.forEach((s) => {
-        const dist = s.scoreDistribution.find((d) => d.range === r)
-        if (dist) count += dist.count
+    candidates.forEach((c) => {
+      const region = c.region
+      if (!regionMap.has(region)) regionMap.set(region, new Map())
+      c.subjects.forEach((sid) => {
+        const subject = examSubjects.find((s) => s.id === sid)
+        if (!subject) return
+        if (!regionMap.get(region)!.has(sid)) {
+          regionMap.get(region)!.set(sid, {
+            region,
+            subjectId: sid,
+            subjectName: subject.name,
+            candidateCount: 0,
+            avgScore: 0,
+            absentCount: 0,
+            absentRate: 0,
+            cheatCount: 0,
+            cheatRate: 0,
+          })
+        }
+        const existing = regionMap.get(region)!.get(sid)!
+        existing.candidateCount = (existing.candidateCount || 0) + 1
       })
-      return count
     })
 
+    const scoreByKey = new Map<string, number[]>()
+    scores.forEach((s) => {
+      const c = candidates.find((cc) => cc.id === s.candidateId)
+      if (!c) return
+      const key = `${c.region}-${s.subjectId}`
+      if (!scoreByKey.has(key)) scoreByKey.set(key, [])
+      scoreByKey.get(key)!.push(s.score)
+    })
+
+    regionMap.forEach((subjectMap, region) => {
+      subjectMap.forEach((stat, subjectId) => {
+        const key = `${region}-${subjectId}`
+        const subjectScores = scoreByKey.get(key) || []
+        const avgScore = subjectScores.length > 0
+          ? subjectScores.reduce((sum, v) => sum + v, 0) / subjectScores.length
+          : 0
+        const absentCount = (stat.candidateCount || 0) - subjectScores.length
+        const absentRate = (stat.candidateCount || 0) > 0 ? absentCount / (stat.candidateCount || 1) : 0
+        result.push({
+          ...stat,
+          totalCandidates: stat.candidateCount!,
+          candidateCount: stat.candidateCount,
+          avgScore: Number(avgScore.toFixed(2)),
+          averageScore: Number(avgScore.toFixed(2)),
+          attendedCount: Math.max(0, subjectScores.length),
+          absentCount: Math.max(0, absentCount),
+          absentRate: Number(Math.max(0, absentRate).toFixed(4)),
+          cheatCount: 0,
+          cheatedCount: 0,
+          cheatRate: 0,
+          cheatedRate: 0,
+          maxScore: subjectScores.length > 0 ? Math.max(...subjectScores) : 0,
+          minScore: subjectScores.length > 0 ? Math.min(...subjectScores) : 0,
+          passRate: subjectScores.length > 0
+            ? subjectScores.filter((s) => s >= 60).length / subjectScores.length
+            : 0,
+          scoreDistribution: [
+            { range: '0-59', count: subjectScores.filter((s) => s < 60).length },
+            { range: '60-69', count: subjectScores.filter((s) => s >= 60 && s < 70).length },
+            { range: '70-79', count: subjectScores.filter((s) => s >= 70 && s < 80).length },
+            { range: '80-89', count: subjectScores.filter((s) => s >= 80 && s < 90).length },
+            { range: '90-100', count: subjectScores.filter((s) => s >= 90).length },
+          ],
+        })
+      })
+    })
+
+    return result
+  }, [candidates, scores, examSubjects])
+
+  const bySubject = useMemo(() => {
+    const map = new Map<string, StatisticsData>()
+    examSubjects.forEach((s) => {
+      map.set(s.id, {
+        region: '全部',
+        subjectId: s.id,
+        subjectName: s.name,
+        candidateCount: 0,
+        avgScore: 0,
+        absentCount: 0,
+        absentRate: 0,
+        cheatCount: 0,
+        cheatRate: 0,
+      })
+    })
+
+    candidates.forEach((c) => {
+      c.subjects.forEach((sid) => {
+        if (map.has(sid)) {
+          const stat = map.get(sid)!
+          stat.candidateCount = (stat.candidateCount || 0) + 1
+        }
+      })
+    })
+
+    examSubjects.forEach((subject) => {
+      const subjectScores = scores.filter((s) => s.subjectId === subject.id)
+      const avg = subjectScores.length > 0
+        ? subjectScores.reduce((s, v) => s + v.score, 0) / subjectScores.length
+        : 0
+      if (map.has(subject.id)) {
+        const stat = map.get(subject.id)!
+        stat.avgScore = Number(avg.toFixed(2))
+        stat.absentCount = Math.max(0, (stat.candidateCount || 0) - subjectScores.length)
+      }
+    })
+
+    return Array.from(map.values())
+  }, [candidates, scores, examSubjects])
+
+  const byRegion = useMemo(() => {
+    const map = new Map<string, StatisticsData>()
+    candidates.forEach((c) => {
+      if (!map.has(c.region)) {
+        map.set(c.region, {
+          region: c.region,
+          subjectId: 'all',
+          subjectName: '全部科目',
+          candidateCount: 0,
+          avgScore: 0,
+          absentCount: 0,
+          absentRate: 0,
+          cheatCount: 0,
+          cheatRate: 0,
+        })
+      }
+      const stat = map.get(c.region)!
+      stat.candidateCount = (stat.candidateCount || 0) + c.subjects.length
+    })
+    return Array.from(map.values())
+  }, [candidates])
+
+  const totalCandidates = candidates.length
+  const totalScores = scores.length
+  const totalArrangements = arrangements.length
+  const totalRooms = examSites.reduce((s, site) => s + site.rooms.length, 0)
+  const totalInvigilators = invigilators.length
+  const avgScoreOverall = scores.length > 0
+    ? Number((scores.reduce((s, v) => s + v.score, 0) / scores.length).toFixed(2))
+    : 0
+
+  const barChartOption = useMemo(() => ({
+    title: { text: '各科目参考人数', left: 'center', textStyle: { fontSize: 14 } },
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: bySubject.map((s) => s.subjectName) },
+    yAxis: { type: 'value', name: '人数' },
+    series: [
+      {
+        type: 'bar',
+        data: bySubject.map((s) => s.candidateCount),
+        itemStyle: { color: '#1677ff' },
+        barWidth: 28,
+        label: { show: true, position: 'top', formatter: '{c}人' },
+      },
+    ],
+  }), [bySubject])
+
+  const avgScoreOption = useMemo(() => ({
+    title: { text: '各科目平均分', left: 'center', textStyle: { fontSize: 14 } },
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: bySubject.map((s) => s.subjectName) },
+    yAxis: { type: 'value', name: '分数', min: 0, max: 100 },
+    series: [
+      {
+        type: 'bar',
+        data: bySubject.map((s) => s.avgScore),
+        itemStyle: { color: '#52c41a' },
+        barWidth: 28,
+        label: { show: true, position: 'top', formatter: '{c}分' },
+        markLine: {
+          data: [{ type: 'average', name: '总平均' }],
+        },
+      },
+    ],
+  }), [bySubject])
+
+  const pieChartOption = useMemo(() => {
+    const data = byRegion.map((r) => ({
+      name: r.region,
+      value: r.candidateCount,
+    }))
     return {
-      tooltip: { trigger: 'axis' },
-      grid: { left: 40, right: 20, top: 30, bottom: 30 },
-      xAxis: { type: 'category', data: ranges },
-      yAxis: { type: 'value' },
+      title: { text: '各地区考生分布', left: 'center', textStyle: { fontSize: 14 } },
+      tooltip: { trigger: 'item', formatter: '{b}: {c}人 ({d}%)' },
+      legend: { orient: 'vertical', left: 'left', top: 30 },
       series: [
         {
-          type: 'bar',
-          data: aggregated,
-          barWidth: '50%',
-          itemStyle: {
-            color: {
-              type: 'linear',
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: '#722ed1' },
-                { offset: 1, color: '#b37feb' },
-              ],
-            },
-            borderRadius: [8, 8, 0, 0],
-          },
-          label: { show: true, position: 'top' },
+          type: 'pie',
+          radius: ['40%', '65%'],
+          center: ['60%', '55%'],
+          avoidLabelOverlap: false,
+          itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+          label: { show: true, formatter: '{b}\n{d}%' },
+          data,
         },
       ],
     }
-  }, [filteredStats])
+  }, [byRegion])
 
-  const rateCompareOption = useMemo(() => {
-    const regionsData = [...new Set(filteredStats.map((s) => s.region))]
+  const regionScoreOption = useMemo(() => {
+    const regions = [...new Set(statsByRegionAndSubject.map((s) => s.region))]
+    const series = examSubjects.map((subject) => ({
+      name: subject.name,
+      type: 'bar',
+      stack: 'total',
+      data: regions.map((region) => {
+        const stat = statsByRegionAndSubject.find(
+          (s) => s.region === region && s.subjectId === subject.id
+        )
+        return stat?.candidateCount || 0
+      }),
+    }))
     return {
-      tooltip: { trigger: 'axis' },
-      legend: { data: ['缺考率(%)', '违纪率(%)', '及格率(%)'], bottom: 0 },
-      grid: { left: 40, right: 40, top: 20, bottom: 50 },
-      xAxis: { type: 'category', data: regionsData, axisLabel: { rotate: 20 } },
-      yAxis: [
-        { type: 'value', name: '百分比(%)', max: 100 },
-      ],
-      series: [
-        {
-          name: '缺考率(%)',
-          type: 'line',
-          smooth: true,
-          data: regionsData.map((r) => {
-            const stats = filteredStats.filter((s) => s.region === r)
-            const avg = stats.length > 0 ? stats.reduce((sum, s) => sum + s.absentRate, 0) / stats.length : 0
-            return Math.round(avg * 10000) / 100
-          }),
-          itemStyle: { color: '#ff4d4f' },
-          areaStyle: { opacity: 0.2 },
-        },
-        {
-          name: '违纪率(%)',
-          type: 'line',
-          smooth: true,
-          data: regionsData.map((r) => {
-            const stats = filteredStats.filter((s) => s.region === r)
-            const avg = stats.length > 0 ? stats.reduce((sum, s) => sum + s.cheatedRate, 0) / stats.length : 0
-            return Math.round(avg * 10000) / 100
-          }),
-          itemStyle: { color: '#fa8c16' },
-          areaStyle: { opacity: 0.2 },
-        },
-        {
-          name: '及格率(%)',
-          type: 'line',
-          smooth: true,
-          data: regionsData.map((r) => {
-            const stats = filteredStats.filter((s) => s.region === r)
-            const avg = stats.length > 0 ? stats.reduce((sum, s) => sum + s.passRate, 0) / stats.length : 0
-            return Math.round(avg * 10000) / 100
-          }),
-          itemStyle: { color: '#52c41a' },
-          areaStyle: { opacity: 0.2 },
-        },
-      ],
+      title: { text: '各地区各科目人数', left: 'center', textStyle: { fontSize: 14 } },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { bottom: 0 },
+      grid: { left: 50, right: 20, top: 40, bottom: 50 },
+      xAxis: { type: 'category', data: regions },
+      yAxis: { type: 'value', name: '人数' },
+      series,
     }
-  }, [filteredStats])
+  }, [statsByRegionAndSubject, examSubjects])
 
-  const columns = [
-    { title: '地区', dataIndex: 'region', width: 100, fixed: 'left' as const },
-    { title: '科目', dataIndex: 'subjectName', width: 120 },
-    { title: '报考人数', dataIndex: 'totalCandidates', width: 100, sorter: (a: any, b: any) => a.totalCandidates - b.totalCandidates },
-    { title: '实考人数', dataIndex: 'attendedCount', width: 100 },
+  const tableColumns = [
+    {
+      title: '地区',
+      dataIndex: 'region',
+      width: 120,
+    },
+    {
+      title: '科目',
+      dataIndex: 'subjectName',
+      width: 140,
+    },
+    {
+      title: '参考人数',
+      dataIndex: 'candidateCount',
+      width: 100,
+      render: (v: number) => <strong>{v}</strong>,
+    },
+    {
+      title: '平均分',
+      dataIndex: 'avgScore',
+      width: 100,
+      render: (v: number) => (v > 0 ? <Tag color="blue">{v} 分</Tag> : '-'),
+    },
+    {
+      title: '缺考人数',
+      dataIndex: 'absentCount',
+      width: 100,
+    },
     {
       title: '缺考率',
       dataIndex: 'absentRate',
       width: 120,
-      render: (v: number) => (
-        <Progress
-          percent={Math.round(v * 10000) / 100}
-          size="small"
-          status={v > 0.1 ? 'exception' : 'normal'}
-          format={(p) => `${p}%`}
-        />
-      ),
+      render: (v: number) => {
+        const pct = (v * 100).toFixed(2)
+        const color = v > 0.1 ? 'red' : v > 0.05 ? 'orange' : 'green'
+        return <Tag color={color}>{pct}%</Tag>
+      },
     },
     {
-      title: '违纪率',
-      dataIndex: 'cheatedRate',
-      width: 120,
-      render: (v: number) => (
-        <Progress
-          percent={Math.round(v * 10000) / 100}
-          size="small"
-          status={v > 0.05 ? 'exception' : 'active'}
-          format={(p) => `${p}%`}
-        />
-      ),
-    },
-    {
-      title: '平均分',
-      dataIndex: 'averageScore',
+      title: '作弊人数',
+      dataIndex: 'cheatCount',
       width: 100,
-      render: (v: number) => <strong>{v}</strong>,
-      sorter: (a: any, b: any) => a.averageScore - b.averageScore,
     },
-    { title: '最高分', dataIndex: 'maxScore', width: 90 },
-    { title: '最低分', dataIndex: 'minScore', width: 90 },
     {
-      title: '及格率',
-      dataIndex: 'passRate',
+      title: '作弊率',
+      dataIndex: 'cheatRate',
       width: 120,
-      render: (v: number) => (
-        <Progress
-          percent={Math.round(v * 10000) / 100}
-          size="small"
-          strokeColor={v > 0.7 ? '#52c41a' : '#fa8c16'}
-          format={(p) => `${p}%`}
-        />
-      ),
+      render: (v: number) => {
+        const pct = (v * 100).toFixed(2)
+        return <Tag color={v > 0 ? 'red' : 'green'}>{pct}%</Tag>
+      },
     },
   ]
 
-  const mapPoints: HeatmapPoint[] = heatmapData.filter((p) => p.type === heatmapType)
+  const HeatmapSvg: React.FC = () => {
+    const invPerSite = examSites.map((site) => {
+      const siteArrangements = arrangements.filter(
+        (a) => site.rooms.some((r) => r.id === a.examRoomId)
+      )
+      const totalSeats = siteArrangements.reduce(
+        (s, a) => s + a.assignments.length,
+        0
+      )
+      const totalCapacity = site.rooms.reduce((s, r) => s + r.capacity, 0)
+      const invCount = invigilators.filter((i) => i.examSiteId === site.id).length
+      return {
+        site,
+        seatUsed: totalSeats,
+        capacity: totalCapacity,
+        usage: totalCapacity > 0 ? totalSeats / totalCapacity : 0,
+        invCount,
+      }
+    })
+
+    const heatColor = (ratio: number) => {
+      if (ratio >= 0.8) return '#ff4d4f'
+      if (ratio >= 0.5) return '#faad14'
+      if (ratio >= 0.3) return '#1677ff'
+      return '#52c41a'
+    }
+
+    return (
+      <svg viewBox="0 0 600 340" style={{ width: '100%', height: 'auto' }}>
+        <defs>
+          <linearGradient id="legendGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#52c41a" />
+            <stop offset="33%" stopColor="#1677ff" />
+            <stop offset="66%" stopColor="#faad14" />
+            <stop offset="100%" stopColor="#ff4d4f" />
+          </linearGradient>
+        </defs>
+
+        <rect x="10" y="10" width="580" height="320" fill="#fafafa" rx="8" stroke="#e8e8e8" />
+
+        <text x="30" y="40" fontSize="14" fill="#333" fontWeight="bold">
+          🗺️  考场占用与监考人员分布热力图
+        </text>
+
+        {invPerSite.map((item, idx) => {
+          const row = Math.floor(idx / 3)
+          const col = idx % 3
+          const x = 40 + col * 185
+          const y = 70 + row * 110
+          const w = 160
+          const h = 90
+          const fill = heatColor(item.usage)
+          return (
+            <g key={item.site.id}>
+              <rect
+                x={x}
+                y={y}
+                width={w}
+                height={h}
+                rx={10}
+                fill={fill}
+                fillOpacity={0.2 + item.usage * 0.6}
+                stroke={fill}
+                strokeWidth={2}
+              />
+              <circle
+                cx={x + w / 2}
+                cy={y + 18}
+                r={22}
+                fill={fill}
+                fillOpacity={0.9}
+              />
+              <text
+                x={x + w / 2}
+                y={y + 23}
+                textAnchor="middle"
+                fontSize="16"
+                fill="#fff"
+                fontWeight="bold"
+              >
+                {item.site.name.slice(0, 2)}
+              </text>
+              <text
+                x={x + w / 2}
+                y={y + 50}
+                textAnchor="middle"
+                fontSize="11"
+                fill="#333"
+                fontWeight="500"
+              >
+                {item.site.name}
+              </text>
+              <text
+                x={x + w / 2}
+                y={y + 66}
+                textAnchor="middle"
+                fontSize="10"
+                fill="#666"
+              >
+                考生 {item.seatUsed}/{item.capacity} | 监考 {item.invCount}人
+              </text>
+              <text
+                x={x + w / 2}
+                y={y + 82}
+                textAnchor="middle"
+                fontSize="11"
+                fill={fill}
+                fontWeight="600"
+              >
+                占用 {Math.round(item.usage * 100)}%
+              </text>
+            </g>
+          )
+        })}
+
+        <text x="30" y="315" fontSize="11" fill="#666">
+          考场占用率图例：
+        </text>
+        <rect x="130" y="306" width="200" height="10" fill="url(#legendGrad)" rx="3" />
+        <text x="340" y="315" fontSize="11" fill="#666">
+          低 (0%)
+        </text>
+        <text x="520" y="315" fontSize="11" fill="#666">
+          高 (100%)
+        </text>
+      </svg>
+    )
+  }
 
   return (
     <div>
@@ -299,8 +454,8 @@ const StatisticsCenter: React.FC = () => {
         <Col span={4}>
           <Card>
             <Statistic
-              title="报考总人数"
-              value={summary.total}
+              title="考生总数"
+              value={totalCandidates}
               prefix={<TeamOutlined />}
               valueStyle={{ color: '#1677ff' }}
             />
@@ -309,28 +464,29 @@ const StatisticsCenter: React.FC = () => {
         <Col span={4}>
           <Card>
             <Statistic
-              title="实考人数"
-              value={summary.attended}
+              title="成绩记录"
+              value={totalScores}
+              prefix={<TrophyOutlined />}
               valueStyle={{ color: '#52c41a' }}
-              prefix={<RiseOutlined />}
             />
           </Card>
         </Col>
         <Col span={4}>
           <Card>
             <Statistic
-              title="缺考人数"
-              value={summary.absent}
-              valueStyle={{ color: '#ff4d4f' }}
-              prefix={<FallOutlined />}
+              title="整体平均分"
+              value={avgScoreOverall}
+              suffix="分"
+              valueStyle={{ color: '#722ed1' }}
             />
           </Card>
         </Col>
         <Col span={4}>
           <Card>
             <Statistic
-              title="违纪人数"
-              value={summary.cheated}
+              title="考场编排数"
+              value={totalArrangements}
+              prefix={<BarChartOutlined />}
               valueStyle={{ color: '#fa8c16' }}
             />
           </Card>
@@ -338,246 +494,91 @@ const StatisticsCenter: React.FC = () => {
         <Col span={4}>
           <Card>
             <Statistic
-              title="综合平均分"
-              value={summary.avgScore}
-              valueStyle={{ color: '#722ed1' }}
-              precision={2}
+              title="考场总数"
+              value={totalRooms}
+              prefix={<EnvironmentOutlined />}
+              valueStyle={{ color: '#13c2c2' }}
             />
           </Card>
         </Col>
         <Col span={4}>
           <Card>
             <Statistic
-              title="综合及格率"
-              value={summary.avgPass}
-              suffix="%"
-              valueStyle={{ color: '#13c2c2' }}
-              precision={2}
+              title="监考人员"
+              value={totalInvigilators}
+              prefix={<CheckCircleOutlined />}
+              valueStyle={{ color: '#eb2f96' }}
             />
           </Card>
         </Col>
       </Row>
 
+      <Row gutter={16}>
+        <Col span={12}>
+          <Card
+            title="📊 各科目参考人数"
+            extra={
+              <Space>
+                <Button
+                  icon={<FileExcelOutlined />}
+                  onClick={() => exportStatisticsToExcel(statsByRegionAndSubject)}
+                >
+                  导出Excel
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<FilePdfOutlined />}
+                  onClick={() => exportStatisticsReportToPDF(statsByRegionAndSubject)}
+                >
+                  导出报告
+                </Button>
+              </Space>
+            }
+          >
+            <ReactECharts option={barChartOption} style={{ height: 280 }} />
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card title="📈 各科目平均分对比">
+            <ReactECharts option={avgScoreOption} style={{ height: 280 }} />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={16} style={{ marginTop: 16 }}>
+        <Col span={10}>
+          <Card title="🥧 地区考生分布">
+            <ReactECharts option={pieChartOption} style={{ height: 340 }} />
+          </Card>
+        </Col>
+        <Col span={14}>
+          <Card title="🗺️ 考场占用与监考热力图（SVG示意图）">
+            <HeatmapSvg />
+          </Card>
+        </Col>
+      </Row>
+
       <Card
-        title="统计筛选与导出"
-        style={{ marginBottom: 16 }}
+        title="📋 地区×科目 交叉统计表"
+        style={{ marginTop: 16 }}
         extra={
           <Space>
-            <Button
-              icon={<FileExcelOutlined />}
-              onClick={() => exportStatisticsToExcel(filteredStats)}
-            >
-              导出Excel
-            </Button>
-            <Button
-              type="primary"
-              icon={<FilePdfOutlined />}
-              onClick={() => exportStatisticsReportToPDF(filteredStats)}
-            >
-              导出PDF报告
-            </Button>
+            <Tag color="blue">真实数据动态计算</Tag>
           </Space>
         }
       >
-        <Space wrap>
-          <Select
-            placeholder="筛选地区"
-            allowClear
-            style={{ width: 160 }}
-            value={filterRegion}
-            onChange={setFilterRegion}
-          >
-            {regions.map((r) => (
-              <Option key={r} value={r}>
-                {r}
-              </Option>
-            ))}
-          </Select>
-          <Select
-            placeholder="筛选科目"
-            allowClear
-            style={{ width: 160 }}
-            value={filterSubject}
-            onChange={setFilterSubject}
-          >
-            {subjects.map((s) => (
-              <Option key={s} value={s}>
-                {s}
-              </Option>
-            ))}
-          </Select>
-        </Space>
+        {statsByRegionAndSubject.length > 0 ? (
+          <Table
+            columns={tableColumns}
+            dataSource={statsByRegionAndSubject}
+            rowKey={(r) => `${r.region}-${r.subjectId}`}
+            pagination={{ pageSize: 8 }}
+            scroll={{ x: 900 }}
+          />
+        ) : (
+          <Empty description="暂无统计数据" style={{ padding: 40 }} />
+        )}
       </Card>
-
-      <Tabs
-        defaultActiveKey="charts"
-        items={[
-          {
-            key: 'charts',
-            label: (
-              <span>
-                <BarChartOutlined /> 图表分析
-              </span>
-            ),
-            children: (
-              <>
-                <Row gutter={16} style={{ marginBottom: 16 }}>
-                  <Col span={12}>
-                    <Card title="各地区报考/实考/缺考人数对比" size="small">
-                      <ReactECharts option={barOption} style={{ height: 320 }} />
-                    </Card>
-                  </Col>
-                  <Col span={12}>
-                    <Card title="各科目报考人数分布" size="small">
-                      <ReactECharts option={pieOption} style={{ height: 320 }} />
-                    </Card>
-                  </Col>
-                </Row>
-                <Row gutter={16} style={{ marginBottom: 16 }}>
-                  <Col span={12}>
-                    <Card title="分数段分布统计" size="small">
-                      <ReactECharts option={scoreDistOption} style={{ height: 320 }} />
-                    </Card>
-                  </Col>
-                  <Col span={12}>
-                    <Card title="各地区缺考率/违纪率/及格率对比" size="small">
-                      <ReactECharts option={rateCompareOption} style={{ height: 320 }} />
-                    </Card>
-                  </Col>
-                </Row>
-                <Card
-                  title={
-                    <Space>
-                      <EnvironmentOutlined />
-                      考点实时热力分布地图
-                      <Radio.Group
-                        value={heatmapType}
-                        onChange={(e) => setHeatmapType(e.target.value)}
-                        size="small"
-                      >
-                        <Radio.Button value="room_usage">考场占用</Radio.Button>
-                        <Radio.Button value="invigilator_density">监考密度</Radio.Button>
-                      </Radio.Group>
-                    </Space>
-                  }
-                >
-                  <div className="map-container">
-                    <div
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        position: 'relative',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        borderRadius: 8,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      <svg width="100%" height="100%" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid slice">
-                        <defs>
-                          <radialGradient id="heatGrad" cx="50%" cy="50%" r="50%">
-                            <stop offset="0%" stopColor="#ff0000" stopOpacity="0.9" />
-                            <stop offset="20%" stopColor="#ff6600" stopOpacity="0.7" />
-                            <stop offset="40%" stopColor="#ffcc00" stopOpacity="0.5" />
-                            <stop offset="60%" stopColor="#99ff00" stopOpacity="0.3" />
-                            <stop offset="100%" stopColor="#0066ff" stopOpacity="0.1" />
-                          </radialGradient>
-                          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                          </pattern>
-                        </defs>
-                        <rect width="100%" height="100%" fill="url(#grid)" />
-
-                        {examSites.map((site, idx) => {
-                          const x = 100 + idx * 150 + (idx % 2) * 30
-                          const y = 80 + (idx % 3) * 140
-                          const intensity = mapPoints.find(
-                            (p) => Math.abs(p.lat - site.lat) < 0.01 && Math.abs(p.lng - site.lng) < 0.01
-                          )?.value || 0
-                          const radius = 30 + intensity * 8
-                          return (
-                            <g key={site.id}>
-                              <circle
-                                cx={x}
-                                cy={y}
-                                r={radius}
-                                fill="url(#heatGrad)"
-                                opacity={0.6}
-                              >
-                                <animate
-                                  attributeName="r"
-                                  values={`${radius};${radius + 10};${radius}`}
-                                  dur="3s"
-                                  repeatCount="indefinite"
-                                />
-                                <animate
-                                  attributeName="opacity"
-                                  values="0.6;0.8;0.6"
-                                  dur="3s"
-                                  repeatCount="indefinite"
-                                />
-                              </circle>
-                              <circle cx={x} cy={y} r={8} fill="#fff" stroke="#1677ff" strokeWidth={2} />
-                              <text x={x} y={y - radius - 8} textAnchor="middle" fill="#fff" fontSize="12" fontWeight="bold">
-                                {site.name}
-                              </text>
-                              <text x={x} y={y + 4} textAnchor="middle" fill="#1677ff" fontSize="10" fontWeight="bold">
-                                {intensity}
-                              </text>
-                              <text x={x} y={y + radius + 16} textAnchor="middle" fill="#fff" fontSize="11">
-                                {heatmapType === 'room_usage' ? `${intensity}个考场` : `${intensity}名监考`}
-                              </text>
-                            </g>
-                          )
-                        })}
-                      </svg>
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 12,
-                          right: 12,
-                          background: 'rgba(0,0,0,0.5)',
-                          padding: '8px 12px',
-                          borderRadius: 4,
-                          color: '#fff',
-                          fontSize: 12,
-                        }}
-                      >
-                        <div style={{ fontWeight: 'bold', marginBottom: 6 }}>
-                          {heatmapType === 'room_usage' ? '考场占用热力图' : '监考人员热力图'}
-                        </div>
-                        <div className="heatmap-legend">
-                          <span>低</span>
-                          <div className="legend-gradient"></div>
-                          <span>高</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              </>
-            ),
-          },
-          {
-            key: 'table',
-            label: (
-              <span>
-                <BarChartOutlined /> 数据明细
-              </span>
-            ),
-            children: filteredStats.length > 0 ? (
-              <Table
-                columns={columns}
-                dataSource={filteredStats}
-                rowKey={(r) => `${r.region}-${r.subjectId}`}
-                scroll={{ x: 1200 }}
-                pagination={{ pageSize: 10, showSizeChanger: true }}
-              />
-            ) : (
-              <Empty description="暂无数据" style={{ padding: 60 }} />
-            ),
-          },
-        ]}
-      />
     </div>
   )
 }

@@ -40,16 +40,16 @@ export function exportStatisticsToExcel(data: StatisticsData[], filename: string
     data.map((d) => ({
       地区: d.region,
       科目: d.subjectName,
-      报考人数: d.totalCandidates,
-      实考人数: d.attendedCount,
+      报考人数: d.totalCandidates ?? d.candidateCount ?? 0,
+      实考人数: d.attendedCount ?? (d.candidateCount || 0) - d.absentCount,
       缺考人数: d.absentCount,
       缺考率: `${(d.absentRate * 100).toFixed(2)}%`,
-      违纪人数: d.cheatedCount,
-      违纪率: `${(d.cheatedRate * 100).toFixed(2)}%`,
-      平均分: d.averageScore,
-      最高分: d.maxScore,
-      最低分: d.minScore,
-      及格率: `${(d.passRate * 100).toFixed(2)}%`,
+      违纪人数: d.cheatedCount ?? d.cheatCount ?? 0,
+      违纪率: `${((d.cheatedRate ?? d.cheatRate ?? 0) * 100).toFixed(2)}%`,
+      平均分: d.averageScore ?? d.avgScore ?? 0,
+      最高分: d.maxScore ?? 0,
+      最低分: d.minScore ?? 0,
+      及格率: `${((d.passRate ?? 0) * 100).toFixed(2)}%`,
     }))
   )
   const wb = XLSX.utils.book_new()
@@ -67,12 +67,12 @@ export function exportStatisticsReportToPDF(data: StatisticsData[], filename: st
   const tableData = data.map((d) => [
     d.region,
     d.subjectName,
-    d.totalCandidates.toString(),
-    d.attendedCount.toString(),
+    (d.totalCandidates ?? d.candidateCount ?? 0).toString(),
+    (d.attendedCount ?? (d.candidateCount || 0) - d.absentCount).toString(),
     `${(d.absentRate * 100).toFixed(2)}%`,
-    `${(d.cheatedRate * 100).toFixed(2)}%`,
-    d.averageScore.toFixed(2),
-    `${(d.passRate * 100).toFixed(2)}%`,
+    `${((d.cheatedRate ?? d.cheatRate ?? 0) * 100).toFixed(2)}%`,
+    (d.averageScore ?? d.avgScore ?? 0).toFixed(2),
+    `${((d.passRate ?? 0) * 100).toFixed(2)}%`,
   ])
 
   autoTable(doc, {
@@ -88,7 +88,7 @@ export function exportStatisticsReportToPDF(data: StatisticsData[], filename: st
     doc.setFontSize(12)
     doc.text(`${d.region} - ${d.subjectName} 分数分布`, 14, yOffset)
     yOffset += 6
-    const distData = d.scoreDistribution.map((sd) => [sd.range, sd.count.toString()])
+    const distData = (d.scoreDistribution || []).map((sd) => [sd.range, sd.count.toString()])
     autoTable(doc, {
       startY: yOffset,
       head: [['分数段', '人数']],

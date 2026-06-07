@@ -13,6 +13,7 @@ export interface Candidate {
   photo: string
   subjects: string[]
   origin: string
+  region: string
   school: string
   specialNeed: SpecialNeedType
   specialNeedDetail?: string
@@ -65,6 +66,7 @@ export interface Invigilator {
   phone: string
   qualifiedSubjects: string[]
   region: string
+  examSiteId?: string
   workHours: number
   maxWorkHours: number
   pastInvigilationCount: number
@@ -173,17 +175,21 @@ export interface StatisticsData {
   region: string
   subjectId: string
   subjectName: string
-  totalCandidates: number
-  attendedCount: number
+  candidateCount?: number
+  totalCandidates?: number
+  attendedCount?: number
   absentCount: number
   absentRate: number
-  cheatedCount: number
-  cheatedRate: number
-  averageScore: number
-  maxScore: number
-  minScore: number
-  passRate: number
-  scoreDistribution: { range: string; count: number }[]
+  cheatCount?: number
+  cheatedCount?: number
+  cheatRate?: number
+  cheatedRate?: number
+  avgScore?: number
+  averageScore?: number
+  maxScore?: number
+  minScore?: number
+  passRate?: number
+  scoreDistribution?: { range: string; count: number }[]
 }
 
 export interface HeatmapPoint {

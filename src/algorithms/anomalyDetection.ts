@@ -112,10 +112,14 @@ export function detectScoreAbnormalities(
   scores.forEach((s) => {
     if (s.score < 0 || s.score > 100) {
       abnormalities.push({ ...s, reason: '分数超出有效范围(0-100)' })
+    } else if (s.score < 30) {
+      abnormalities.push({ ...s, reason: `极端低分 (${s.score}分 < 30分)` })
+    } else if (s.score > 95) {
+      abnormalities.push({ ...s, reason: `极端高分 (${s.score}分 > 95分)` })
     } else if (std > 0 && Math.abs(s.score - mean) > 3 * std) {
       abnormalities.push({
         ...s,
-        reason: `分数异常偏离均值 (${s.score} vs 均值${mean.toFixed(1)}±${std.toFixed(1)})`,
+        reason: `偏离均值±3σ标准差 (${s.score} vs 均值${mean.toFixed(1)}±${std.toFixed(1)})`,
       })
     } else if (s.score === 0 || s.score === 100) {
       abnormalities.push({ ...s, reason: '满分或零分需复核' })
