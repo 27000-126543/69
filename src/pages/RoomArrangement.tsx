@@ -406,7 +406,7 @@ const RoomArrangement: React.FC = () => {
       >
         {selectedArrangement && (
           <>
-            <Descriptions column={1} size="small" style={{ marginBottom: 16 }}>
+            <Descriptions column={1} size="small" style={{ marginBottom: 16 }} bordered>
               <Descriptions.Item label="考场">
                 {examSites.find((s) => s.rooms.some((r) => r.id === selectedArrangement.examRoomId))?.name}
               </Descriptions.Item>
@@ -417,6 +417,23 @@ const RoomArrangement: React.FC = () => {
               <Descriptions.Item label="审批状态">
                 {approvalTag(selectedArrangement.approvalStatus)}
               </Descriptions.Item>
+              {selectedArrangement.approvalComment && (
+                <Descriptions.Item label="审批意见">
+                  <Tag color={selectedArrangement.approvalStatus === 'approved' ? 'green' : 'red'}>
+                    {selectedArrangement.approvalComment}
+                  </Tag>
+                </Descriptions.Item>
+              )}
+              {selectedArrangement.approvedBy && (
+                <>
+                  <Descriptions.Item label="审批人">{selectedArrangement.approvedBy}</Descriptions.Item>
+                  <Descriptions.Item label="审批时间">
+                    {selectedArrangement.approvedAt
+                      ? new Date(selectedArrangement.approvedAt).toLocaleString('zh-CN')
+                      : '-'}
+                  </Descriptions.Item>
+                </>
+              )}
             </Descriptions>
             <Divider>座位分布图</Divider>
             <div style={{ textAlign: 'center', padding: 16, background: '#fafafa', borderRadius: 8 }}>
